@@ -261,7 +261,7 @@ const mockCryptoWithdrawal: CryptoWithdrawal = {
 
 export const handlers = [
   // Auth
-  http.post('/auth/register', async ({ request }) => {
+  http.post('*/auth/register', async ({ request }) => {
     const body = await request.json() as { email: string; fullName: string };
     const response: AuthResponse = {
       user: { ...mockUser, email: body.email, fullName: body.fullName },
@@ -270,7 +270,7 @@ export const handlers = [
     return HttpResponse.json(response, { status: 201 });
   }),
 
-  http.post('/auth/login', async () => {
+  http.post('*/auth/login', async () => {
     const response: AuthResponse = {
       user: mockUser,
       token: 'mock_jwt_token_' + Date.now(),
@@ -278,24 +278,29 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
-  http.get('/auth/me', () => {
+  http.get('*/auth/me', () => {
     return HttpResponse.json(mockUser);
   }),
 
-  http.post('/auth/logout', () => {
+  http.post('*/auth/logout', () => {
     return new HttpResponse(null, { status: 204 });
   }),
 
   // Markets
-  http.get('/markets', ({ request }) => {
+  http.get('*/markets', ({ request }) => {
     const url = new URL(request.url);
     const category = url.searchParams.get('category');
+    const status = url.searchParams.get('status');
     const q = url.searchParams.get('q');
 
     let filteredMarkets = [...mockMarkets];
 
     if (category) {
       filteredMarkets = filteredMarkets.filter(m => m.category === category);
+    }
+
+    if (status) {
+      filteredMarkets = filteredMarkets.filter(m => m.status === status);
     }
 
     if (q) {
@@ -312,7 +317,19 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
-  http.get('/markets/:marketId', ({ params }) => {
+  http.get('*/markets/:marketId/orderbook', () => {
+    return HttpResponse.json(mockOrderbook);
+  }),
+
+  http.get('*/markets/:marketId/trades', () => {
+    const response: PaginatedTrades = {
+      items: mockTrades,
+      nextCursor: null,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.get('*/markets/:marketId', ({ params }) => {
     const market = mockMarkets.find(m => m.id === params.marketId);
     if (!market) {
       return HttpResponse.json(
@@ -323,20 +340,8 @@ export const handlers = [
     return HttpResponse.json(market);
   }),
 
-  http.get('/markets/:marketId/orderbook', () => {
-    return HttpResponse.json(mockOrderbook);
-  }),
-
-  http.get('/markets/:marketId/trades', () => {
-    const response: PaginatedTrades = {
-      items: mockTrades,
-      nextCursor: null,
-    };
-    return HttpResponse.json(response);
-  }),
-
   // Orders
-  http.post('/orders', async ({ request }) => {
+  http.post('*/orders', async ({ request }) => {
     const body = await request.json() as { marketId: string; outcomeId: string; side: string; type: string; price?: string; amount: string };
     const order: Order = {
       id: 'order_' + Date.now(),
@@ -353,7 +358,7 @@ export const handlers = [
     return HttpResponse.json(order, { status: 201 });
   }),
 
-  http.get('/orders', () => {
+  http.get('*/orders', () => {
     const response: PaginatedOrders = {
       items: mockOrders,
       nextCursor: null,
@@ -361,7 +366,7 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
-  http.post('/orders/:orderId/cancel', ({ params }) => {
+  http.post('*/orders/:orderId/cancel', ({ params }) => {
     const order = mockOrders.find(o => o.id === params.orderId);
     if (!order) {
       return HttpResponse.json(
@@ -373,7 +378,7 @@ export const handlers = [
   }),
 
   // Positions
-  http.get('/positions', () => {
+  http.get('*/positions', () => {
     const response: PositionsResponse = {
       items: mockPositions,
     };
@@ -381,11 +386,11 @@ export const handlers = [
   }),
 
   // Wallet
-  http.get('/wallet/balance', () => {
+  http.get('*/wallet/balance', () => {
     return HttpResponse.json(mockBalance);
   }),
 
-  http.post('/wallet/deposits/pix/create', async ({ request }) => {
+  http.post('*/wallet/deposits/pix/create', async ({ request }) => {
     const body = await request.json() as { amountBrl: string };
     const payload: PixDeposit = {
       depositId: 'dep_' + Date.now(),
@@ -398,7 +403,7 @@ export const handlers = [
     return HttpResponse.json(payload, { status: 201 });
   }),
 
-  http.get('/wallet/deposits/pix/:depositId', ({ params }) => {
+  http.get('*/wallet/deposits/pix/:depositId', ({ params }) => {
     const payload: PixDeposit = {
       depositId: params.depositId as string,
       status: 'completed',
@@ -410,7 +415,7 @@ export const handlers = [
     return HttpResponse.json(payload);
   }),
 
-  http.post('/wallet/withdrawals/pix/create', async ({ request }) => {
+  http.post('*/wallet/withdrawals/pix/create', async ({ request }) => {
     const body = await request.json() as { amountBrl: string; pixKeyType: string; pixKeyValue: string };
     const payload: PixWithdrawal = {
       withdrawalId: 'with_' + Date.now(),
@@ -423,7 +428,7 @@ export const handlers = [
     return HttpResponse.json(payload, { status: 201 });
   }),
 
-  http.post('/wallet/deposits/crypto/createAddress', async ({ request }) => {
+  http.post('*/wallet/deposits/crypto/createAddress', async ({ request }) => {
     const body = await request.json() as { asset: string; chain: string };
     const payload: CryptoDeposit = {
       ...mockCryptoDeposit,
@@ -434,7 +439,7 @@ export const handlers = [
     return HttpResponse.json(payload, { status: 201 });
   }),
 
-  http.get('/wallet/deposits/crypto/:depositId', ({ params }) => {
+  http.get('*/wallet/deposits/crypto/:depositId', ({ params }) => {
     const payload: CryptoDeposit = {
       ...mockCryptoDeposit,
       depositId: params.depositId as string,
@@ -444,7 +449,7 @@ export const handlers = [
     return HttpResponse.json(payload);
   }),
 
-  http.post('/wallet/withdrawals/crypto/create', async ({ request }) => {
+  http.post('*/wallet/withdrawals/crypto/create', async ({ request }) => {
     const body = await request.json() as { amount: string; asset: string; chain: string; address: string };
     const payload: CryptoWithdrawal = {
       ...mockCryptoWithdrawal,
@@ -459,7 +464,7 @@ export const handlers = [
   }),
 
   // KYC
-  http.post('/kyc/start', () => {
+  http.post('*/kyc/start', () => {
     return HttpResponse.json({
       kycCaseId: 'kyc_' + Date.now(),
       provider: 'mock-provider',
@@ -469,7 +474,7 @@ export const handlers = [
     }, { status: 201 });
   }),
 
-  http.get('/kyc/status', () => {
+  http.get('*/kyc/status', () => {
     return HttpResponse.json({
       status: 'pending',
       updatedAt: new Date().toISOString(),
@@ -478,7 +483,7 @@ export const handlers = [
   }),
 
   // Health
-  http.get('/health', () => {
+  http.get('*/health', () => {
     return HttpResponse.json({ status: 'ok' });
   }),
 ];

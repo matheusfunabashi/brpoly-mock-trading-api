@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { MarketList } from '@/components/markets/MarketList';
 import { CategoryTabs } from '@/components/markets/CategoryTabs';
+import { StatusTabs, type StatusFilter } from '@/components/markets/StatusTabs';
+import { SortSelect, type SortOption } from '@/components/markets/SortSelect';
 import { Input } from '@/components/ui/input';
 import { Search, TrendingUp, Users, DollarSign } from 'lucide-react';
 
 const Index = () => {
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortOption>('volume');
+  const [status, setStatus] = useState<StatusFilter>('open');
 
   return (
     <div className="min-h-screen">
@@ -66,12 +70,18 @@ const Index = () => {
 
       {/* Markets Section */}
       <section className="container py-12">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-2xl font-semibold">Mercados em alta</h2>
+        <div className="mb-8 space-y-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-2xl font-semibold">Explorar mercados</h2>
+            <div className="flex items-center gap-4">
+              <StatusTabs selected={status} onChange={setStatus} />
+              <SortSelect value={sort} onChange={setSort} />
+            </div>
+          </div>
           <CategoryTabs selected={category} onChange={setCategory} />
         </div>
 
-        <MarketList category={category} search={search} />
+        <MarketList category={category} search={search} sort={sort} status={status} />
       </section>
     </div>
   );
