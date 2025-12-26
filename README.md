@@ -60,56 +60,17 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## API Configuration (Mock vs Real)
+## Mock vs Real API
 
-This project uses MSW (Mock Service Worker) to intercept network requests and return mock data during development. You can toggle between mock mode and a real API backend.
+- Mock mode is enabled by default during development.
+- `VITE_MOCK_API=true` enables MSW mocks (default if unset).
+- `VITE_MOCK_API=false` disables mocks and uses the real backend.
+- `VITE_API_BASE_URL` sets the backend base URL (default `http://localhost:3001`).
 
-### Environment Variables
+## API Contract
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_MOCK_API` | `true` | Set to `false` to disable MSW and use real API |
-| `VITE_API_BASE_URL` | `http://localhost:3001` | Base URL for the real API server |
-
-### Mock Mode (Default)
-
-```bash
-npm install
-npm run dev
-```
-
-MSW will intercept all API requests and return mock responses that match the OpenAPI spec. This is ideal for frontend development without a backend.
-
-### Real API Mode
-
-Create a `.env.local` file in the project root:
-
-```env
-VITE_MOCK_API=false
-VITE_API_BASE_URL=https://api.brpoly.com
-```
-
-Then start the dev server:
-
-```bash
-npm run dev
-```
-
-### API Client
-
-All API calls must go through the centralized client at `src/lib/api/*`. Never use `fetch` directly in components.
-
-```typescript
-import { apiClient } from '@/lib/api';
-
-// Example usage
-const markets = await apiClient.listMarkets({ status: 'open' });
-const balance = await apiClient.getBalance();
-```
-
-### OpenAPI Spec
-
-The API contract is defined in `/brpoly/openapi.yaml`. All MSW handlers and TypeScript types are aligned with this spec.
+- The API contract lives at `./openapi.yaml` in the repo root.
+- Frontend mocks and types should stay consistent with this spec.
 
 ## How can I deploy this project?
 

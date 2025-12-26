@@ -1,0 +1,1358 @@
+openapi: 3.1.0
+info:
+  title: BrPoly Mock Trading API
+  version: 0.1.1
+  description: |
+    Brazil-first Polymarket-like mock REST API.
+
+    WebSockets: connect to `/ws`.
+    Topics:
+      - `markets.{id}.ticker`
+      - `markets.{id}.orderbook`
+      - `markets.{id}.trades`
+      - `orders.user.{userId}`
+      - `positions.user.{userId}`
+
+servers:
+  - url: http://localhost:3001
+    description: Local development
+  - url: https://api.staging.brpoly.com
+    description: Staging
+  - url: https://api.brpoly.com
+    description: Production
+
+tags:
+  - name: auth
+  - name: markets
+  - name: orders
+  - name: positions
+  - name: wallet
+  - name: kyc
+  - name: admin
+  - name: system
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: Opaque cursor for pagination.
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Unique key to safely retry order placement or money-moving requests.
+
+  responses:
+    Error400:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error401:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error404:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code (e.g., INSUFFICIENT_BALANCE).
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+
+    # --- Shared primitives ---
+    DecimalString:
+      type: string
+      description: Decimal string (use string to avoid float errors).
+      examples: ["0.52", "200.00", "123.4567"]
+
+    ProbabilityString:
+      type: string
+      description: Decimal string probability between 0 and 1 inclusive.
+      pattern: "^(0(\\.\\d+)?|1(\\.0+)?)$"
+      examples: ["0", "0.52", "0.9999", "1", "1.0"]
+
+    Role:
+      type: string
+      enum: [customer, admin]
+
+    MarketStatus:
+      type: string
+      enum: [draft, open, closed, resolved, canceled]
+
+    OrderStatus:
+      type: string
+      enum: [open, partial, filled, canceled, expired]
+
+    KycStatus:
+      type: string
+      enum: [not_started, pending, approved, rejected, manual_review]
+
+    # --- Domain models ---
+    User:
+      type: object
+      required: [id, email, fullName, role, kycStatus, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        kycStatus:
+          $ref: "#/components/schemas/KycStatus"
+        createdAt:
+          type: string
+          format: date-time
+
+    Outcome:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+
+    MarketPrice:
+      type: object
+      required: [outcomeId, price]
+      properties:
+        outcomeId:
+          type: string
+        price:
+          $ref: "#/components/schemas/ProbabilityString"
+      description: |
+        Current market probability price for an outcome (0.00–1.00).
+        UI may format like BRL, but the underlying value is probability.
+
+    Market:
+      type: object
+      required:
+        [id, title, description, category, status, closeTime, outcomes, currentPrices, volumeBrl]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        status:
+          $ref: "#/components/schemas/MarketStatus"
+        closeTime:
+          type: string
+          format: date-time
+        outcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Outcome"
+        currentPrices:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketPrice"
+        volumeBrl:
+          $ref: "#/components/schemas/DecimalString"
+
+    Order:
+      type: object
+      required:
+        [id, marketId, outcomeId, side, type, amount, filledAmount, status, createdAt]
+      properties:
+        id:
+          type: string
+        marketId:
+          type: string
+        outcomeId:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        type:
+          type: string
+          enum: [limit, market]
+        price:
+          $ref: "#/components/schemas/ProbabilityString"
+          description: Probability price (0–1). Present for limit orders.
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+          description: Decimal string size (contracts)
+        filledAmount:
+          $ref: "#/components/schemas/DecimalString"
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        createdAt:
+          type: string
+          format: date-time
+
+    Trade:
+      type: object
+      required: [id, marketId, outcomeId, price, amount, takerSide, createdAt]
+      properties:
+        id:
+          type: string
+        marketId:
+          type: string
+        outcomeId:
+          type: string
+        price:
+          $ref: "#/components/schemas/ProbabilityString"
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+        takerSide:
+          type: string
+          enum: [buy, sell]
+        createdAt:
+          type: string
+          format: date-time
+
+    Position:
+      type: object
+      required: [marketId, outcomeId, size, avgPrice, pnlBrl, lastPrice]
+      properties:
+        marketId:
+          type: string
+        outcomeId:
+          type: string
+        size:
+          $ref: "#/components/schemas/DecimalString"
+        avgPrice:
+          $ref: "#/components/schemas/ProbabilityString"
+        pnlBrl:
+          $ref: "#/components/schemas/DecimalString"
+        lastPrice:
+          $ref: "#/components/schemas/ProbabilityString"
+
+    Balance:
+      type: object
+      required: [brlAvailable, brlReserved, totalBrl, updatedAt]
+      properties:
+        brlAvailable:
+          $ref: "#/components/schemas/DecimalString"
+        brlReserved:
+          $ref: "#/components/schemas/DecimalString"
+        totalBrl:
+          $ref: "#/components/schemas/DecimalString"
+        updatedAt:
+          type: string
+          format: date-time
+
+    PixDeposit:
+      type: object
+      required: [depositId, status, qrCodeText, expiresAt, amountBrl]
+      properties:
+        depositId:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, expired, failed]
+        qrCodeText:
+          type: string
+        qrCodeImageUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+        amountBrl:
+          $ref: "#/components/schemas/DecimalString"
+
+    PixWithdrawal:
+      type: object
+      required: [withdrawalId, status, createdAt, amountBrl, pixKeyType, pixKeyValue]
+      properties:
+        withdrawalId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        amountBrl:
+          $ref: "#/components/schemas/DecimalString"
+        pixKeyType:
+          type: string
+          enum: [cpf, cnpj, email, phone, evp]
+        pixKeyValue:
+          type: string
+
+    CryptoDeposit:
+      type: object
+      required: [depositId, address, asset, chain, status, confirmations]
+      properties:
+        depositId:
+          type: string
+        address:
+          type: string
+        asset:
+          type: string
+          example: USDC
+        chain:
+          type: string
+          example: polygon
+        status:
+          type: string
+          enum: [pending, confirmed]
+        confirmations:
+          type: integer
+          minimum: 0
+
+    CryptoWithdrawal:
+      type: object
+      required: [withdrawalId, status, amount, asset, chain, address]
+      properties:
+        withdrawalId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+          description: Decimal string asset units
+        asset:
+          type: string
+        chain:
+          type: string
+        address:
+          type: string
+
+    KycCase:
+      type: object
+      required: [kycCaseId, provider, status, updatedAt]
+      properties:
+        kycCaseId:
+          type: string
+        provider:
+          type: string
+          example: mock-provider
+        status:
+          $ref: "#/components/schemas/KycStatus"
+        redirectUrl:
+          type: string
+          format: uri
+        updatedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    PaginatedMarkets:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Market"
+        nextCursor:
+          type: ["string", "null"]
+
+    PaginatedOrders:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        nextCursor:
+          type: ["string", "null"]
+
+    PaginatedTrades:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trade"
+        nextCursor:
+          type: ["string", "null"]
+
+    PaginatedKycCases:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KycCase"
+        nextCursor:
+          type: ["string", "null"]
+
+    PaginatedUsers:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        nextCursor:
+          type: ["string", "null"]
+
+    OrderbookLevel:
+      type: object
+      required: [price, amount]
+      properties:
+        price:
+          $ref: "#/components/schemas/ProbabilityString"
+        amount:
+          $ref: "#/components/schemas/DecimalString"
+
+    OrderbookSnapshot:
+      type: object
+      required: [bids, asks]
+      properties:
+        bids:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderbookLevel"
+        asks:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderbookLevel"
+
+    PositionsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Position"
+
+    AuditEvent:
+      type: object
+      required: [id, actorUserId, action, targetType, targetId, metadata, createdAt]
+      properties:
+        id:
+          type: string
+        actorUserId:
+          type: string
+        action:
+          type: string
+        targetType:
+          type: string
+        targetId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginatedAudit:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+        nextCursor:
+          type: ["string", "null"]
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Register new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                fullName:
+                  type: string
+            example:
+              email: user@example.com
+              password: Pass123!
+              fullName: Maria Silva
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, token]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  token:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+            example:
+              email: user@example.com
+              password: Pass123!
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, token]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  token:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: me
+      summary: Current user
+      responses:
+        "200":
+          description: Me
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Logout (client discards token)
+      responses:
+        "204":
+          description: Logged out
+
+  /markets:
+    get:
+      tags: [markets]
+      operationId: listMarkets
+      summary: List markets
+      security: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/MarketStatus"
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated markets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMarkets"
+
+  /markets/{marketId}:
+    get:
+      tags: [markets]
+      operationId: getMarket
+      summary: Market detail
+      security: []
+      parameters:
+        - name: marketId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Market
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /markets/{marketId}/orderbook:
+    get:
+      tags: [markets]
+      operationId: getOrderbook
+      summary: Orderbook snapshot
+      security: []
+      description: Live updates via `markets.{id}.orderbook` WebSocket topic.
+      parameters:
+        - name: marketId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: outcomeId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Orderbook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderbookSnapshot"
+              example:
+                bids: [{ price: "0.48", amount: "120" }]
+                asks: [{ price: "0.52", amount: "100" }]
+
+  /markets/{marketId}/trades:
+    get:
+      tags: [markets]
+      operationId: listTrades
+      summary: Recent trades
+      security: []
+      description: Live updates via `markets.{id}.trades` WebSocket topic.
+      parameters:
+        - name: marketId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Trades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedTrades"
+
+  /orders:
+    post:
+      tags: [orders]
+      operationId: placeOrder
+      summary: Place order
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [marketId, outcomeId, side, type, amount, price]
+                  properties:
+                    marketId: { type: string }
+                    outcomeId: { type: string }
+                    side: { type: string, enum: [buy, sell] }
+                    type: { type: string, enum: [limit] }
+                    price: { $ref: "#/components/schemas/ProbabilityString" }
+                    amount: { $ref: "#/components/schemas/DecimalString" }
+                - type: object
+                  required: [marketId, outcomeId, side, type, amount]
+                  properties:
+                    marketId: { type: string }
+                    outcomeId: { type: string }
+                    side: { type: string, enum: [buy, sell] }
+                    type: { type: string, enum: [market] }
+                    amount: { $ref: "#/components/schemas/DecimalString" }
+            example:
+              marketId: m_123
+              outcomeId: o_yes
+              side: buy
+              type: limit
+              price: "0.52"
+              amount: "100"
+      responses:
+        "201":
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+    get:
+      tags: [orders]
+      operationId: listOrders
+      summary: List my orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - name: marketId
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedOrders"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /orders/{orderId}/cancel:
+    post:
+      tags: [orders]
+      operationId: cancelOrder
+      summary: Cancel order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order canceled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /positions:
+    get:
+      tags: [positions]
+      operationId: listPositions
+      summary: My positions
+      responses:
+        "200":
+          description: Positions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionsResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /wallet/balance:
+    get:
+      tags: [wallet]
+      operationId: getBalance
+      summary: Wallet balance (BRL)
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /wallet/deposits/pix/create:
+    post:
+      tags: [wallet]
+      operationId: createPixDeposit
+      summary: Create Pix deposit
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountBrl]
+              properties:
+                amountBrl:
+                  $ref: "#/components/schemas/DecimalString"
+            example:
+              amountBrl: "200.00"
+      responses:
+        "201":
+          description: Pix deposit created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixDeposit"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /wallet/deposits/pix/{depositId}:
+    get:
+      tags: [wallet]
+      operationId: getPixDeposit
+      summary: Pix deposit status
+      parameters:
+        - name: depositId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deposit status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixDeposit"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /wallet/withdrawals/pix/create:
+    post:
+      tags: [wallet]
+      operationId: createPixWithdrawal
+      summary: Create Pix withdrawal
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountBrl, pixKeyType, pixKeyValue]
+              properties:
+                amountBrl:
+                  $ref: "#/components/schemas/DecimalString"
+                pixKeyType:
+                  type: string
+                  enum: [cpf, cnpj, email, phone, evp]
+                pixKeyValue:
+                  type: string
+            example:
+              amountBrl: "150.00"
+              pixKeyType: cpf
+              pixKeyValue: "12345678901"
+      responses:
+        "201":
+          description: Withdrawal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixWithdrawal"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /wallet/deposits/crypto/createAddress:
+    post:
+      tags: [wallet]
+      operationId: createCryptoDepositAddress
+      summary: Create crypto deposit address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset, chain]
+              properties:
+                asset: { type: string }
+                chain: { type: string }
+            example:
+              asset: USDC
+              chain: polygon
+      responses:
+        "201":
+          description: Deposit address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CryptoDeposit"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /wallet/deposits/crypto/{depositId}:
+    get:
+      tags: [wallet]
+      operationId: getCryptoDeposit
+      summary: Crypto deposit status
+      parameters:
+        - name: depositId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deposit status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CryptoDeposit"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /wallet/withdrawals/crypto/create:
+    post:
+      tags: [wallet]
+      operationId: createCryptoWithdrawal
+      summary: Create crypto withdrawal
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, asset, chain, address]
+              properties:
+                amount: { $ref: "#/components/schemas/DecimalString" }
+                asset: { type: string }
+                chain: { type: string }
+                address: { type: string }
+            example:
+              amount: "50"
+              asset: USDC
+              chain: polygon
+              address: "0xabc123"
+      responses:
+        "201":
+          description: Withdrawal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CryptoWithdrawal"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /kyc/start:
+    post:
+      tags: [kyc]
+      operationId: startKyc
+      summary: Start KYC
+      responses:
+        "201":
+          description: KYC started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycCase"
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /kyc/status:
+    get:
+      tags: [kyc]
+      operationId: getKycStatus
+      summary: KYC status
+      responses:
+        "200":
+          description: Current KYC status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updatedAt]
+                properties:
+                  status:
+                    $ref: "#/components/schemas/KycStatus"
+                  updatedAt:
+                    type: string
+                    format: date-time
+                  reason:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Error401"
+
+  /admin/markets:
+    post:
+      tags: [admin]
+      operationId: adminCreateMarket
+      summary: Create market
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, category, closeTime, outcomes]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                category: { type: string }
+                closeTime: { type: string, format: date-time }
+                outcomes:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    required: [title]
+                    properties:
+                      title: { type: string }
+      responses:
+        "201":
+          description: Market created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+
+  /admin/markets/{id}:
+    patch:
+      tags: [admin]
+      operationId: adminUpdateMarket
+      summary: Edit/pause/unpause market
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                category: { type: string }
+                status:
+                  $ref: "#/components/schemas/MarketStatus"
+      responses:
+        "200":
+          description: Market updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /admin/markets/{id}/resolve:
+    post:
+      tags: [admin]
+      operationId: adminResolveMarket
+      summary: Resolve market
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcomeId]
+              properties:
+                outcomeId: { type: string }
+                resolutionNotes: { type: string }
+      responses:
+        "200":
+          description: Market resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /admin/markets/{id}/cancel:
+    post:
+      tags: [admin]
+      operationId: adminCancelMarket
+      summary: Cancel market
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Market canceled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /admin/kyc/cases:
+    get:
+      tags: [admin]
+      operationId: adminListKycCases
+      summary: List KYC cases
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/KycStatus"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: KYC cases
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedKycCases"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+
+  /admin/kyc/cases/{kycCaseId}:
+    patch:
+      tags: [admin]
+      operationId: adminDecideKycCase
+      summary: Decide KYC case
+      parameters:
+        - name: kycCaseId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approve, reject] }
+                notes: { type: string }
+      responses:
+        "200":
+          description: Decision saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycCase"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: adminSearchUsers
+      summary: Search users
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedUsers"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+
+  /admin/users/{userId}:
+    patch:
+      tags: [admin]
+      operationId: adminBanUser
+      summary: Ban/unban user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ban]
+              properties:
+                ban: { type: boolean }
+                banReason: { type: string }
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /admin/audit:
+    get:
+      tags: [admin]
+      operationId: adminAudit
+      summary: Audit log
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAudit"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+
+  /health:
+    get:
+      tags: [system]
+      operationId: health
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+              example:
+                status: ok
