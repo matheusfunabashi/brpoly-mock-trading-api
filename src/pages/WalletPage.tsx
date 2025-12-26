@@ -13,7 +13,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Plus, Wallet, ArrowUpRight, ArrowDownRight, Coins } from 'lucide-react';
+import type { PixKeyType } from '@/lib/api/types';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -29,8 +37,9 @@ export default function WalletPage() {
   });
 
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawKeyType, setWithdrawKeyType] = useState('cpf');
+  const [withdrawKeyType, setWithdrawKeyType] = useState<PixKeyType>('cpf');
   const [withdrawKeyValue, setWithdrawKeyValue] = useState('');
+  const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
 
   const [cryptoAsset, setCryptoAsset] = useState('USDC');
   const [cryptoChain, setCryptoChain] = useState('polygon');
@@ -61,7 +70,7 @@ export default function WalletPage() {
     mutationFn: () =>
       apiClient.createPixWithdrawal({
         amountBrl: withdrawAmount,
-        pixKeyType: withdrawKeyType as any,
+        pixKeyType: withdrawKeyType,
         pixKeyValue: withdrawKeyValue,
       }),
     onSuccess: (data) => {
@@ -71,6 +80,7 @@ export default function WalletPage() {
       });
       setWithdrawAmount('');
       setWithdrawKeyValue('');
+      setIsWithdrawDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['balance'] });
     },
     onError: (error) => {
@@ -183,7 +193,7 @@ export default function WalletPage() {
                 </DialogContent>
               </Dialog>
 
-              <Dialog>
+              <Dialog open={isWithdrawDialogOpen} onOpenChange={setIsWithdrawDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="flex-1">
                     <ArrowUpRight className="mr-2 h-4 w-4" />
@@ -203,16 +213,23 @@ export default function WalletPage() {
                         placeholder="150.00"
                         value={withdrawAmount}
                         onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="font-mono"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="withdraw-key-type">Tipo de chave</Label>
-                      <Input
-                        id="withdraw-key-type"
-                        value={withdrawKeyType}
-                        onChange={(e) => setWithdrawKeyType(e.target.value)}
-                        placeholder="cpf | email | phone | evp"
-                      />
+                      <Label>Tipo de chave</Label>
+                      <Select value={withdrawKeyType} onValueChange={(v) => setWithdrawKeyType(v as PixKeyType)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cpf">CPF</SelectItem>
+                          <SelectItem value="cnpj">CNPJ</SelectItem>
+                          <SelectItem value="email">E-mail</SelectItem>
+                          <SelectItem value="phone">Telefone</SelectItem>
+                          <SelectItem value="evp">Chave aleatória (EVP)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="withdraw-key-value">Chave Pix</Label>
