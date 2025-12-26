@@ -1,0 +1,113 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+const statusCopy: Record<string, { title: string; description: string; icon: JSX.Element; tone: string }> = {
+  not_started: {
+    title: 'KYC não iniciado',
+    description: 'Confirme sua identidade para começar a negociar.',
+    icon: <AlertCircle className="h-5 w-5 text-muted-foreground" />,
+    tone: '',
+  },
+  pending: {
+    title: 'Em análise',
+    description: 'Seu envio está em análise. Normalmente leva poucos minutos.',
+    icon: <Clock className="h-5 w-5 text-primary" />,
+    tone: 'text-primary',
+  },
+  manual_review: {
+    title: 'Revisão manual',
+    description: 'Nossa equipe precisa validar algumas informações adicionais.',
+    icon: <AlertCircle className="h-5 w-5 text-amber-500" />,
+    tone: 'text-amber-500',
+  },
+  approved: {
+    title: 'Aprovado',
+    description: 'Identidade verificada com sucesso.',
+    icon: <CheckCircle2 className="h-5 w-5 text-emerald-500" />,
+    tone: 'text-emerald-500',
+  },
+  rejected: {
+    title: 'Recusado',
+    description: 'Não foi possível verificar seus dados. Tente reenviar.',
+    icon: <XCircle className="h-5 w-5 text-destructive" />,
+    tone: 'text-destructive',
+  },
+};
+
+export default function KycPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['kyc-status'],
+    queryFn: () => apiClient.getKycStatus(),
+  });
+
+  const startKyc = useMutation({
+    mutationFn: () => apiClient.startKyc(),
+    onSuccess: (resp) => {
+      toast({
+        title: 'KYC iniciado',
+        description: resp.redirectUrl
+          ? 'Abra o link de verificação para continuar.'
+          : 'Siga as instruções no app.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['kyc-status'] });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Erro ao iniciar KYC', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const currentStatus = data?.status ?? 'not_started';
+  const copy = statusCopy[currentStatus] ?? statusCopy.not_started;
+
+  return (
+    <div className="container py-10">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Verificação de identidade</h1>
+        <p className="text-muted-foreground">Acompanhe o status do seu KYC.</p>
+      </div>
+
+      <Card className="max-w-2xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              {copy.icon}
+              <span className={copy.tone}>{copy.title}</span>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{copy.description}</p>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {data?.updatedAt && new Date(data.updatedAt).toLocaleString('pt-BR')}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <Skeleton className="h-10 w-32" />
+          ) : (
+            <>
+              {data?.reason && (
+                <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
+                  Observação: {data.reason}
+                </div>
+              )}
+              <Button
+                onClick={() => startKyc.mutate()}
+                disabled={startKyc.isPending || currentStatus === 'approved' || currentStatus === 'pending'}
+              >
+                {startKyc.isPending ? 'Iniciando...' : currentStatus === 'approved' ? 'KYC aprovado' : 'Iniciar KYC'}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+

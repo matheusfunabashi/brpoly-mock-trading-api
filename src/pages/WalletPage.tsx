@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, Wallet, ArrowUpRight, ArrowDownRight, Coins } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -27,6 +27,15 @@ export default function WalletPage() {
     queryKey: ['balance'],
     queryFn: () => apiClient.getBalance(),
   });
+
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawKeyType, setWithdrawKeyType] = useState('cpf');
+  const [withdrawKeyValue, setWithdrawKeyValue] = useState('');
+
+  const [cryptoAsset, setCryptoAsset] = useState('USDC');
+  const [cryptoChain, setCryptoChain] = useState('polygon');
+  const [cryptoAddress, setCryptoAddress] = useState('');
+  const [cryptoWithdrawalAmount, setCryptoWithdrawalAmount] = useState('');
 
   const { mutate: createDeposit, isPending } = useMutation({
     mutationFn: () => apiClient.createPixDeposit({ amountBrl: depositAmount }),
@@ -45,6 +54,61 @@ export default function WalletPage() {
         description: error.message,
         variant: 'destructive',
       });
+    },
+  });
+
+  const { mutate: createWithdrawal, isPending: isWithdrawing } = useMutation({
+    mutationFn: () =>
+      apiClient.createPixWithdrawal({
+        amountBrl: withdrawAmount,
+        pixKeyType: withdrawKeyType as any,
+        pixKeyValue: withdrawKeyValue,
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: 'Saque solicitado',
+        description: `Saque de ${formatBrl(data.amountBrl)} em processamento.`,
+      });
+      setWithdrawAmount('');
+      setWithdrawKeyValue('');
+      queryClient.invalidateQueries({ queryKey: ['balance'] });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao sacar', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const { mutate: createCryptoDeposit } = useMutation({
+    mutationFn: () => apiClient.createCryptoDepositAddress({ asset: cryptoAsset, chain: cryptoChain }),
+    onSuccess: (data) => {
+      toast({
+        title: 'Endereço gerado',
+        description: `${data.asset} em ${data.chain}: ${data.address}`,
+      });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao gerar endereço', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const { mutate: createCryptoWithdrawal, isPending: isCryptoWithdrawing } = useMutation({
+    mutationFn: () =>
+      apiClient.createCryptoWithdrawal({
+        amount: cryptoWithdrawalAmount,
+        asset: cryptoAsset,
+        chain: cryptoChain,
+        address: cryptoAddress,
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: 'Saque cripto enviado',
+        description: `${data.amount} ${data.asset} para ${data.address}`,
+      });
+      setCryptoWithdrawalAmount('');
+      setCryptoAddress('');
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao sacar cripto', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -119,15 +183,62 @@ export default function WalletPage() {
                 </DialogContent>
               </Dialog>
 
-              <Button variant="outline" className="flex-1">
-                Sacar
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="flex-1">
+                    <ArrowUpRight className="mr-2 h-4 w-4" />
+                    Sacar Pix
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Saque via Pix</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="withdraw-amount">Valor (R$)</Label>
+                      <Input
+                        id="withdraw-amount"
+                        type="number"
+                        placeholder="150.00"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="withdraw-key-type">Tipo de chave</Label>
+                      <Input
+                        id="withdraw-key-type"
+                        value={withdrawKeyType}
+                        onChange={(e) => setWithdrawKeyType(e.target.value)}
+                        placeholder="cpf | email | phone | evp"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="withdraw-key-value">Chave Pix</Label>
+                      <Input
+                        id="withdraw-key-value"
+                        placeholder="Insira sua chave Pix"
+                        value={withdrawKeyValue}
+                        onChange={(e) => setWithdrawKeyValue(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      onClick={() => createWithdrawal()}
+                      disabled={isWithdrawing || !withdrawAmount || !withdrawKeyValue}
+                      className="w-full"
+                    >
+                      {isWithdrawing ? 'Solicitando...' : 'Solicitar saque'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Transactions */}
+      {/* Transactions & Crypto */}
       <div className="container py-8">
         <h2 className="mb-4 text-xl font-semibold">Transações recentes</h2>
 
@@ -170,6 +281,60 @@ export default function WalletPage() {
               </div>
             </div>
             <span className="font-mono font-semibold text-buy">+R$ 1.000,00</span>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="glass-card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Coins className="h-4 w-4 text-primary" />
+              <h3 className="text-lg font-semibold">Depósito cripto (mock)</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Ativo</Label>
+                <Input value={cryptoAsset} onChange={(e) => setCryptoAsset(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Rede</Label>
+                <Input value={cryptoChain} onChange={(e) => setCryptoChain(e.target.value)} />
+              </div>
+              <Button onClick={() => createCryptoDeposit()} className="w-full">
+                Gerar endereço
+              </Button>
+            </div>
+          </div>
+
+          <div className="glass-card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Coins className="h-4 w-4 text-primary" />
+              <h3 className="text-lg font-semibold">Saque cripto (mock)</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Valor</Label>
+                <Input
+                  value={cryptoWithdrawalAmount}
+                  onChange={(e) => setCryptoWithdrawalAmount(e.target.value)}
+                  placeholder="50"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Endereço</Label>
+                <Input
+                  value={cryptoAddress}
+                  onChange={(e) => setCryptoAddress(e.target.value)}
+                  placeholder="0x..."
+                />
+              </div>
+              <Button
+                onClick={() => createCryptoWithdrawal()}
+                disabled={isCryptoWithdrawing || !cryptoWithdrawalAmount || !cryptoAddress}
+                className="w-full"
+              >
+                {isCryptoWithdrawing ? 'Enviando...' : 'Solicitar saque'}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

@@ -4,7 +4,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@api-types": ["../../packages/shared/src/api-types.ts"],
+      "@api-types/*": ["../../packages/shared/src/*"]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,

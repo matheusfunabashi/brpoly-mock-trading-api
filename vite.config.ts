@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@api-types": path.resolve(__dirname, "../../packages/shared/src/api-types.ts"),
     },
   },
 }));

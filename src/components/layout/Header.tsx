@@ -40,6 +40,22 @@ export function Header() {
                 Portfólio
               </Link>
             )}
+            {isAuthenticated && (
+              <Link
+                to="/wallet"
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Carteira
+              </Link>
+            )}
+            {isAuthenticated && (
+              <Link
+                to="/kyc"
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                KYC
+              </Link>
+            )}
           </nav>
         </div>
 

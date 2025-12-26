@@ -12,6 +12,10 @@ import type {
   PaginatedTrades,
   PositionsResponse,
   AuthResponse,
+  PixDeposit,
+  PixWithdrawal,
+  CryptoDeposit,
+  CryptoWithdrawal,
 } from '../types';
 
 // Mock data
@@ -237,6 +241,24 @@ const mockOrderbook: OrderbookSnapshot = {
   ],
 };
 
+const mockCryptoDeposit: CryptoDeposit = {
+  depositId: 'crypto_dep_1',
+  address: '0xabc123',
+  asset: 'USDC',
+  chain: 'polygon',
+  status: 'pending',
+  confirmations: 0,
+};
+
+const mockCryptoWithdrawal: CryptoWithdrawal = {
+  withdrawalId: 'crypto_with_1',
+  status: 'pending',
+  amount: '50',
+  asset: 'USDC',
+  chain: 'polygon',
+  address: '0xabc123',
+};
+
 export const handlers = [
   // Auth
   http.post('/auth/register', async ({ request }) => {
@@ -365,13 +387,75 @@ export const handlers = [
 
   http.post('/wallet/deposits/pix/create', async ({ request }) => {
     const body = await request.json() as { amountBrl: string };
-    return HttpResponse.json({
+    const payload: PixDeposit = {
       depositId: 'dep_' + Date.now(),
       status: 'pending',
       qrCodeText: '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-426614174000',
+      qrCodeImageUrl: 'https://via.placeholder.com/200',
       expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       amountBrl: body.amountBrl,
-    }, { status: 201 });
+    };
+    return HttpResponse.json(payload, { status: 201 });
+  }),
+
+  http.get('/wallet/deposits/pix/:depositId', ({ params }) => {
+    const payload: PixDeposit = {
+      depositId: params.depositId as string,
+      status: 'completed',
+      qrCodeText: '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-426614174000',
+      qrCodeImageUrl: 'https://via.placeholder.com/200',
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      amountBrl: '200.00',
+    };
+    return HttpResponse.json(payload);
+  }),
+
+  http.post('/wallet/withdrawals/pix/create', async ({ request }) => {
+    const body = await request.json() as { amountBrl: string; pixKeyType: string; pixKeyValue: string };
+    const payload: PixWithdrawal = {
+      withdrawalId: 'with_' + Date.now(),
+      status: 'processing',
+      createdAt: new Date().toISOString(),
+      amountBrl: body.amountBrl,
+      pixKeyType: body.pixKeyType as PixWithdrawal['pixKeyType'],
+      pixKeyValue: body.pixKeyValue,
+    };
+    return HttpResponse.json(payload, { status: 201 });
+  }),
+
+  http.post('/wallet/deposits/crypto/createAddress', async ({ request }) => {
+    const body = await request.json() as { asset: string; chain: string };
+    const payload: CryptoDeposit = {
+      ...mockCryptoDeposit,
+      asset: body.asset,
+      chain: body.chain,
+      depositId: 'crypto_dep_' + Date.now(),
+    };
+    return HttpResponse.json(payload, { status: 201 });
+  }),
+
+  http.get('/wallet/deposits/crypto/:depositId', ({ params }) => {
+    const payload: CryptoDeposit = {
+      ...mockCryptoDeposit,
+      depositId: params.depositId as string,
+      status: 'confirmed',
+      confirmations: 20,
+    };
+    return HttpResponse.json(payload);
+  }),
+
+  http.post('/wallet/withdrawals/crypto/create', async ({ request }) => {
+    const body = await request.json() as { amount: string; asset: string; chain: string; address: string };
+    const payload: CryptoWithdrawal = {
+      ...mockCryptoWithdrawal,
+      withdrawalId: 'crypto_with_' + Date.now(),
+      amount: body.amount,
+      asset: body.asset,
+      chain: body.chain,
+      address: body.address,
+      status: 'processing',
+    };
+    return HttpResponse.json(payload, { status: 201 });
   }),
 
   // KYC
@@ -387,8 +471,9 @@ export const handlers = [
 
   http.get('/kyc/status', () => {
     return HttpResponse.json({
-      status: 'approved',
+      status: 'pending',
       updatedAt: new Date().toISOString(),
+      reason: 'Verificação de identidade em andamento',
     });
   }),
 

@@ -15,6 +15,13 @@ import type {
   CreatePixDepositRequest,
   PixDeposit,
   KycCase,
+  CreatePixWithdrawalRequest,
+  PixWithdrawal,
+  CreateCryptoDepositAddressRequest,
+  CryptoDeposit,
+  CreateCryptoWithdrawalRequest,
+  CryptoWithdrawal,
+  KycStatusResponse,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -197,12 +204,45 @@ class ApiClient {
     return this.request<PixDeposit>(`/wallet/deposits/pix/${depositId}`);
   }
 
+  async createPixWithdrawal(data: CreatePixWithdrawalRequest): Promise<PixWithdrawal> {
+    return this.request<PixWithdrawal>('/wallet/withdrawals/pix/create', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createCryptoDepositAddress(
+    data: CreateCryptoDepositAddressRequest
+  ): Promise<CryptoDeposit> {
+    return this.request<CryptoDeposit>('/wallet/deposits/crypto/createAddress', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCryptoDeposit(depositId: string): Promise<CryptoDeposit> {
+    return this.request<CryptoDeposit>(`/wallet/deposits/crypto/${depositId}`);
+  }
+
+  async createCryptoWithdrawal(data: CreateCryptoWithdrawalRequest): Promise<CryptoWithdrawal> {
+    return this.request<CryptoWithdrawal>('/wallet/withdrawals/crypto/create', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
   // KYC
   async startKyc(): Promise<KycCase> {
     return this.request<KycCase>('/kyc/start', { method: 'POST' });
   }
 
-  async getKycStatus(): Promise<{ status: string; updatedAt: string; reason?: string }> {
+  async getKycStatus(): Promise<KycStatusResponse> {
     return this.request('/kyc/status');
   }
 }

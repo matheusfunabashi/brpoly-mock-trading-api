@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import MarketDetailPage from "./pages/MarketDetailPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import WalletPage from "./pages/WalletPage";
+import KycPage from "./pages/KycPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import NotFound from "./pages/NotFound";
@@ -28,6 +29,7 @@ const App = () => (
               <Route path="/market/:marketId" element={<MarketDetailPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/wallet" element={<WalletPage />} />
+              <Route path="/kyc" element={<KycPage />} />
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />

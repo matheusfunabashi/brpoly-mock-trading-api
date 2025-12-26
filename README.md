@@ -60,6 +60,12 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Developer (Mock vs API)
+
+- Mock mode (default): `npm install` then `npm run dev` (VITE_MOCK_API defaults to true). MSW serves responses matching `openapi.yaml`.
+- Real API mode: set `VITE_MOCK_API=false` and `VITE_API_BASE_URL=https://your-api` in `.env.local`, then `npm run dev`.
+- API spec: see `openapi.yaml` (root) and generated types in `packages/shared/src/api-types.ts`. Keep UI calls via `src/lib/api/*` only.
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
