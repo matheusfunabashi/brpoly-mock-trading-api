@@ -1,17 +1,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
+import type { Market } from '@/lib/api/types';
 import { MarketCard } from './MarketCard';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { SortOption } from './SortSelect';
+import type { StatusFilter } from './StatusTabs';
 
 interface MarketListProps {
   category?: string;
   search?: string;
+  sort?: SortOption;
+  status?: StatusFilter;
 }
 
-export function MarketList({ category, search }: MarketListProps) {
+function sortMarkets(markets: Market[], sort: SortOption): Market[] {
+  const sorted = [...markets];
+  switch (sort) {
+    case 'volume':
+      return sorted.sort((a, b) => parseFloat(b.volumeBrl) - parseFloat(a.volumeBrl));
+    case 'new':
+      return sorted.sort((a, b) => new Date(b.closeTime).getTime() - new Date(a.closeTime).getTime());
+    case 'closing':
+      return sorted.sort((a, b) => new Date(a.closeTime).getTime() - new Date(b.closeTime).getTime());
+    default:
+      return sorted;
+  }
+}
+
+export function MarketList({ category, search, sort = 'volume', status }: MarketListProps) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['markets', category, search],
-    queryFn: () => apiClient.listMarkets({ category, q: search, status: 'open' }),
+    queryKey: ['markets', category, search, status],
+    queryFn: () => apiClient.listMarkets({ category, q: search, status: status || undefined }),
   });
 
   if (isLoading) {
@@ -45,9 +64,11 @@ export function MarketList({ category, search }: MarketListProps) {
     );
   }
 
+  const sortedMarkets = sortMarkets(data.items, sort);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {data.items.map((market, index) => (
+      {sortedMarkets.map((market, index) => (
         <MarketCard key={market.id} market={market} index={index} />
       ))}
     </div>
