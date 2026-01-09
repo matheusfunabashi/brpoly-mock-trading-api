@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Wallet, ArrowUpRight, ArrowDownRight, Coins } from 'lucide-react';
-import type { PixKeyType } from '@/lib/api/types';
+import type { PixDeposit, PixKeyType } from '@/lib/api/types';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -30,6 +30,7 @@ export default function WalletPage() {
   const queryClient = useQueryClient();
   const [depositAmount, setDepositAmount] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [lastDeposit, setLastDeposit] = useState<PixDeposit | null>(null);
 
   const { data: balance, isLoading } = useQuery({
     queryKey: ['balance'],
@@ -53,13 +54,31 @@ export default function WalletPage() {
         title: 'Pix gerado!',
         description: `Use o código Pix para depositar ${formatBrl(data.amountBrl)}`,
       });
-      setIsDialogOpen(false);
       setDepositAmount('');
-      queryClient.invalidateQueries({ queryKey: ['balance'] });
+      setLastDeposit(data);
     },
     onError: (error) => {
       toast({
         title: 'Erro ao gerar Pix',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const { mutate: completeDeposit, isPending: isCompletingDeposit } = useMutation({
+    mutationFn: (depositId: string) => apiClient.devCompletePixDeposit(depositId),
+    onSuccess: ({ deposit }) => {
+      setLastDeposit(deposit);
+      toast({
+        title: 'Depósito confirmado',
+        description: `Saldo atualizado com ${formatBrl(deposit.amountBrl)}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['balance'] });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Erro ao confirmar depósito',
         description: error.message,
         variant: 'destructive',
       });
@@ -189,6 +208,37 @@ export default function WalletPage() {
                     >
                       {isPending ? 'Gerando...' : 'Gerar código Pix'}
                     </Button>
+                    {lastDeposit && (
+                      <div className="rounded-lg border border-dashed border-border/70 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              Depósito Pix gerado
+                            </p>
+                            <p className="font-semibold">{formatBrl(lastDeposit.amountBrl)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Expira em {new Date(lastDeposit.expiresAt).toLocaleTimeString('pt-BR')}
+                            </p>
+                            <p className="mt-2 text-[11px] font-mono leading-relaxed text-muted-foreground break-all">
+                              {lastDeposit.qrCodeText}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium capitalize">
+                            {lastDeposit.status}
+                          </span>
+                        </div>
+                        {import.meta.env.DEV && (
+                          <Button
+                            variant="outline"
+                            className="mt-3 w-full"
+                            onClick={() => completeDeposit(lastDeposit.depositId)}
+                            disabled={isCompletingDeposit}
+                          >
+                            {isCompletingDeposit ? 'Confirmando...' : 'Simular confirmação (DEV)'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </DialogContent>
               </Dialog>
@@ -252,6 +302,35 @@ export default function WalletPage() {
               </Dialog>
             </div>
           </div>
+          {lastDeposit && (
+            <div className="mt-4 max-w-md rounded-lg border border-dashed border-border/70 bg-card/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Depósito Pix</p>
+                  <p className="font-semibold">{formatBrl(lastDeposit.amountBrl)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Status: <span className="font-medium capitalize">{lastDeposit.status}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Expira em {new Date(lastDeposit.expiresAt).toLocaleTimeString('pt-BR')}
+                  </p>
+                  <p className="mt-2 text-[11px] font-mono leading-relaxed text-muted-foreground break-all">
+                    {lastDeposit.qrCodeText}
+                  </p>
+                </div>
+              </div>
+              {import.meta.env.DEV && (
+                <Button
+                  variant="outline"
+                  className="mt-3 w-full"
+                  onClick={() => completeDeposit(lastDeposit.depositId)}
+                  disabled={isCompletingDeposit}
+                >
+                  {isCompletingDeposit ? 'Confirmando...' : 'Simular confirmação (DEV)'}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

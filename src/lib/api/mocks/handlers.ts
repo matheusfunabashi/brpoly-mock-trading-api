@@ -16,6 +16,7 @@ import type {
   PixWithdrawal,
   CryptoDeposit,
   CryptoWithdrawal,
+  DevCompletePixDepositResponse,
 } from '../types';
 
 // Mock data
@@ -217,12 +218,14 @@ const mockPositions: Position[] = [
   },
 ];
 
-const mockBalance: Balance = {
+let mockBalance: Balance = {
   brlAvailable: '1250.50',
   brlReserved: '200.00',
   totalBrl: '1450.50',
   updatedAt: '2024-12-25T10:00:00Z',
 };
+
+let lastPixDeposit: PixDeposit | null = null;
 
 const mockOrderbook: OrderbookSnapshot = {
   bids: [
@@ -397,22 +400,52 @@ export const handlers = [
       status: 'pending',
       qrCodeText: '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-426614174000',
       qrCodeImageUrl: 'https://via.placeholder.com/200',
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       amountBrl: body.amountBrl,
     };
+    lastPixDeposit = payload;
     return HttpResponse.json(payload, { status: 201 });
   }),
 
   http.get('*/wallet/deposits/pix/:depositId', ({ params }) => {
-    const payload: PixDeposit = {
-      depositId: params.depositId as string,
-      status: 'completed',
-      qrCodeText: '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-426614174000',
-      qrCodeImageUrl: 'https://via.placeholder.com/200',
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      amountBrl: '200.00',
+    if (!lastPixDeposit || lastPixDeposit.depositId !== params.depositId) {
+      return HttpResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Deposit not found' } },
+        { status: 404 }
+      );
+    }
+    return HttpResponse.json(lastPixDeposit);
+  }),
+
+  http.post('*/dev/pix/deposits/:depositId/complete', ({ params }) => {
+    if (!lastPixDeposit || lastPixDeposit.depositId !== params.depositId) {
+      return HttpResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Deposit not found' } },
+        { status: 404 }
+      );
+    }
+
+    if (lastPixDeposit.status === 'pending') {
+      lastPixDeposit = {
+        ...lastPixDeposit,
+        status: 'completed',
+      };
+
+      const amount = parseFloat(lastPixDeposit.amountBrl);
+      mockBalance = {
+        brlAvailable: (parseFloat(mockBalance.brlAvailable) + amount).toFixed(2),
+        brlReserved: mockBalance.brlReserved,
+        totalBrl: (parseFloat(mockBalance.totalBrl) + amount).toFixed(2),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const response: DevCompletePixDepositResponse = {
+      deposit: lastPixDeposit,
+      balance: mockBalance,
     };
-    return HttpResponse.json(payload);
+
+    return HttpResponse.json(response);
   }),
 
   http.post('*/wallet/withdrawals/pix/create', async ({ request }) => {

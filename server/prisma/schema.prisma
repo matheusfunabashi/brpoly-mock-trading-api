@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  customer
+  admin
+}
+
+enum MarketStatus {
+  draft
+  open
+  closed
+  resolved
+  canceled
+}
+
+enum OrderStatus {
+  open
+  partial
+  filled
+  canceled
+  expired
+}
+
+enum OrderSide {
+  buy
+  sell
+}
+
+enum OrderType {
+  limit
+  market
+}
+
+enum KycStatus {
+  not_started
+  pending
+  approved
+  rejected
+  manual_review
+}
+
+enum PixDepositStatus {
+  pending
+  completed
+  expired
+  failed
+}
+
+enum WalletTransactionType {
+  PIX_DEPOSIT_CREDIT
+}
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  password   String
+  fullName   String
+  role       Role        @default(customer)
+  kycStatus  KycStatus   @default(not_started)
+  createdAt  DateTime    @default(now())
+  orders     Order[]
+  positions  Position[]
+  trades     Trade[]     @relation("TradeTaker")
+  balance    WalletBalance?
+  idempotencyKeys IdempotencyKey[]
+  pixDeposits PixDeposit[]
+  walletTransactions WalletTransaction[]
+}
+
+model Market {
+  id           String         @id @default(cuid())
+  title        String
+  description  String
+  category     String
+  status       MarketStatus   @default(open)
+  closeTime    DateTime
+  volumeBrl    Decimal        @default(0)
+  outcomes     Outcome[]
+  prices       MarketPrice[]
+  orders       Order[]
+  trades       Trade[]
+  positions    Position[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Outcome {
+  id        String  @id @default(cuid())
+  title     String
+  market    Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId  String
+  orders    Order[]
+  trades    Trade[]
+  positions Position[]
+  prices    MarketPrice[]
+}
+
+model MarketPrice {
+  id         String   @id @default(cuid())
+  market     Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId   String
+  outcome    Outcome  @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+  outcomeId  String
+  price      Decimal  @db.Decimal(10, 4)
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  market      Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId    String
+  outcome     Outcome     @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+  outcomeId   String
+  side        OrderSide
+  type        OrderType
+  price       Decimal?    @db.Decimal(10, 4)
+  amount      Decimal     @db.Decimal(18, 6)
+  filledAmount Decimal    @db.Decimal(18, 6) @default(0)
+  status      OrderStatus @default(open)
+  createdAt   DateTime    @default(now())
+}
+
+model Trade {
+  id         String    @id @default(cuid())
+  market     Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId   String
+  outcome    Outcome   @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+  outcomeId  String
+  price      Decimal   @db.Decimal(10, 4)
+  amount     Decimal   @db.Decimal(18, 6)
+  takerSide  OrderSide
+  createdAt  DateTime  @default(now())
+  taker      User?     @relation("TradeTaker", fields: [takerUserId], references: [id])
+  takerUserId String?
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  market     Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId   String
+  outcome    Outcome  @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+  outcomeId  String
+  size       Decimal  @db.Decimal(18, 6)
+  avgPrice   Decimal  @db.Decimal(10, 4)
+  pnlBrl     Decimal  @db.Decimal(18, 6)
+  lastPrice  Decimal  @db.Decimal(10, 4)
+}
+
+model WalletBalance {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  brlAvailable Decimal @db.Decimal(18, 2)
+  brlReserved  Decimal @db.Decimal(18, 2)
+  totalBrl     Decimal @db.Decimal(18, 2)
+  updatedAt    DateTime @default(now())
+}
+
+model PixDeposit {
+  id             String           @id @default(cuid())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  amountBrl      Decimal          @db.Decimal(18, 2)
+  status         PixDepositStatus @default(pending)
+  qrCodeText     String
+  qrCodeImageUrl String?
+  expiresAt      DateTime
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model WalletTransaction {
+  id            String                @id @default(cuid())
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  type          WalletTransactionType
+  amountBrl     Decimal               @db.Decimal(18, 2)
+  referenceType String
+  referenceId   String
+  createdAt     DateTime              @default(now())
+
+  @@unique([referenceType, referenceId])
+}
+
+model IdempotencyKey {
+  id         String   @id @default(cuid())
+  key        String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  endpoint   String
+  statusCode Int
+  response   Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([key, userId, endpoint])
+}
+
+

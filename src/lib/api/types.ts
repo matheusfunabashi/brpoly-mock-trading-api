@@ -89,6 +89,11 @@ export interface PixDeposit {
   amountBrl: DecimalString;
 }
 
+export interface DevCompletePixDepositResponse {
+  deposit: PixDeposit;
+  balance: Balance;
+}
+
 export interface PixWithdrawal {
   withdrawalId: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';

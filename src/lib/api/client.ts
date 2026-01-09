@@ -22,6 +22,7 @@ import type {
   CreateCryptoWithdrawalRequest,
   CryptoWithdrawal,
   KycStatusResponse,
+  DevCompletePixDepositResponse,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -33,37 +34,45 @@ class ApiClient {
     this.token = localStorage.getItem('auth_token');
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((options.headers as Record<string, string>) || {}),
-    };
+private async request<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const hasBody = options.body !== undefined;
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
+  // Start from any headers the caller passed
+  const headers: Record<string, string> = {
+    ...((options.headers as Record<string, string>) || {}),
+  };
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: { code: 'UNKNOWN', message: 'An error occurred' },
-      }));
-      throw new Error(error.error?.message || 'Request failed');
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    return response.json();
+  // Only set JSON content-type if there's actually a body
+  if (hasBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
   }
+
+  if (this.token) {
+    headers['Authorization'] = `Bearer ${this.token}`;
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({
+      error: { code: 'UNKNOWN', message: 'An error occurred' },
+    }));
+    throw new Error(error.error?.message || 'Request failed');
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+
 
   setToken(token: string | null) {
     this.token = token;
@@ -202,6 +211,12 @@ class ApiClient {
 
   async getPixDeposit(depositId: string): Promise<PixDeposit> {
     return this.request<PixDeposit>(`/wallet/deposits/pix/${depositId}`);
+  }
+
+  async devCompletePixDeposit(depositId: string): Promise<DevCompletePixDepositResponse> {
+    return this.request<DevCompletePixDepositResponse>(`/dev/pix/deposits/${depositId}/complete`, {
+      method: 'POST',
+    });
   }
 
   async createPixWithdrawal(data: CreatePixWithdrawalRequest): Promise<PixWithdrawal> {

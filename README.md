@@ -66,11 +66,18 @@ This project is built with:
 - `VITE_MOCK_API=true` enables MSW mocks (default if unset).
 - `VITE_MOCK_API=false` disables mocks and uses the real backend.
 - `VITE_API_BASE_URL` sets the backend base URL (default `http://localhost:3001`).
+- In development you can force-complete a Pix depósito via `POST /dev/pix/deposits/:depositId/complete` (guarded by `NODE_ENV !== 'production'`).
 
 ## API Contract
 
 - The API contract lives at `./openapi.yaml` in the repo root.
 - Frontend mocks and types should stay consistent with this spec.
+
+## Backend (Fastify)
+
+- Backend lives in `server/` (Fastify + Prisma + PostgreSQL).
+- Run it locally: `cd server && cp .env.example .env && npm install && npx prisma migrate dev && npx prisma db seed && npm run dev`.
+- From the repo root, `npm run dev` starts both frontend and backend together.
 
 ## How can I deploy this project?
 
