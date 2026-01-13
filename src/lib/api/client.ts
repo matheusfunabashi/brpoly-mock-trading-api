@@ -73,7 +73,6 @@ private async request<T>(
   return response.json();
 }
 
-
   setToken(token: string | null) {
     this.token = token;
     if (token) {

@@ -70,6 +70,7 @@ export default function WalletPage() {
     mutationFn: (depositId: string) => apiClient.devCompletePixDeposit(depositId),
     onSuccess: ({ deposit }) => {
       setLastDeposit(deposit);
+      setIsDialogOpen(false);
       toast({
         title: 'Depósito confirmado',
         description: `Saldo atualizado com ${formatBrl(deposit.amountBrl)}.`,
